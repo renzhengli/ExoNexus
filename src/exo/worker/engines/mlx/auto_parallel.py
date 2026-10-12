@@ -7,7 +7,19 @@ from typing import TYPE_CHECKING, Literal, Protocol, cast
 import time
 import mlx.core as mx
 import mlx.nn as nn
-import nvtx
+
+try:
+    import nvtx
+except ImportError:
+    from contextlib import nullcontext
+
+    class _DummyNvtx:
+        @staticmethod
+        def annotate(*_args: object, **_kwargs: object):
+            return nullcontext()
+
+    nvtx = _DummyNvtx()  # pyright: ignore[reportConstantRedefinition]
+
 from mlx.nn.layers.distributed import (
     shard_inplace,
     shard_linear,

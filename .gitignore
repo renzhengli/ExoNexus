@@ -44,3 +44,8 @@ tmp/models
 /.claude
 /.codex
 skills-lock.json
+
+# profiling
+*.sqlite
+*.nsys-rep
+*profile*.json
