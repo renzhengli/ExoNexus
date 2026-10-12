@@ -1,7 +1,9 @@
+import atexit
+import contextlib
 import json
 import os
-import signal
 import sys
+import tempfile
 import time
 from typing import Any, ClassVar, Self
 
@@ -20,6 +22,10 @@ class ExoProfileTracker:
     def _init_tracker(self) -> None:
         self.output_filepath: str = os.getenv("EXO_REPORT_FILE", _DEFAULT_REPORT_FILE)
         self.device_rank: int = int(os.getenv("EXO_DEVICE_RANK", "0"))
+        self.model_id: str = "mlx-community/Meta-Llama-3.1-8B-Instruct-bf16"
+
+        self.is_warming_up: bool = False
+        self._exported: bool = False
 
         # 统计数据结构
         self.prompt_text: str = ""
@@ -39,21 +45,44 @@ class ExoProfileTracker:
 
         self.start_generation_time: float = 0.0
         self.end_generation_time: float = 0.0
-        self._exported: bool = False
 
-        # 注册退出钩子，保证 Ctrl+C 保存
-        try:
-            signal.signal(signal.SIGINT, self._handle_exit)
-            signal.signal(signal.SIGTERM, self._handle_exit)
-        except Exception:
-            pass
+        # 注册退出钩子，保证进程正常退出或被中断时保存
+        atexit.register(self.export_report_to_json)
 
-    def set_prompt(self, prompt: str, token_count: int) -> None:
+    def set_device_and_model(self, rank: int, model_id: str) -> None:
+        self.device_rank = rank
+        self.model_id = model_id
+
+    def set_warmup_mode(self, is_warmup: bool) -> None:
+        self.is_warming_up = is_warmup
+
+    def reset(self) -> None:
+        self.prompt_text = ""
+        self.prompt_tokens = 0
+        self.output_text = ""
+        self.generated_tokens = 0
+        self.prefill_duration_ms = 0.0
+        self.token_step_latencies.clear()
+        self.forward_comm_times.clear()
+        self.backward_comm_times.clear()
+        self.compute_times.clear()
+        self.sampling_times.clear()
+        self.start_generation_time = 0.0
+        self.end_generation_time = 0.0
+        self._exported = False
+
+    def set_prompt(self, prompt: str, token_count: int, is_warmup: bool = False) -> None:
+        if self.is_warming_up or is_warmup or "Prompt to warm up" in prompt:
+            return
+
+        self.reset()
         self.prompt_text = prompt
         self.prompt_tokens = token_count
         self.start_generation_time = time.perf_counter()
 
     def record_prefill(self, duration_ms: float) -> None:
+        if self.is_warming_up:
+            return
         self.prefill_duration_ms = duration_ms
 
     def record_step(
@@ -64,6 +93,9 @@ class ExoProfileTracker:
         sampling_ms: float = 0.0,
         ring_comm_ms: float = 0.0,
     ) -> None:
+        if self.is_warming_up:
+            return
+
         self.generated_tokens += 1
         self.compute_times.append(compute_ms)
         self.forward_comm_times.append(comm_ms)
@@ -73,17 +105,24 @@ class ExoProfileTracker:
         self.end_generation_time = time.perf_counter()
 
         tok_speed = 1000.0 / step_total_ms if step_total_ms > 0 else 0.0
-        print(
-            f"[EXO-Profile] Token #{self.generated_tokens:04d} | "
-            f"本步总耗时: {step_total_ms:.2f}ms ({tok_speed:.1f} tok/s) | "
-            f"计算耗时: {compute_ms:.2f}ms | 通信耗时: {comm_ms:.2f}ms",
-            flush=True,
-        )
+        with contextlib.suppress(Exception):
+            print(
+                f"[EXO-Profile] Token #{self.generated_tokens:04d} | "
+                f"本步总耗时: {step_total_ms:.2f}ms ({tok_speed:.1f} tok/s) | "
+                f"计算耗时: {compute_ms:.2f}ms | 通信耗时: {comm_ms:.2f}ms",
+                flush=True,
+            )
 
     def append_output_chunk(self, text: str) -> None:
+        if self.is_warming_up:
+            return
         self.output_text += text
 
     def export_report_to_json(self) -> None:
+        # 如果当前进程没有任何推理数据，严禁写出空报告或覆盖有效报告
+        if self.generated_tokens == 0 and not self.prompt_text:
+            return
+
         if self._exported:
             return
         self._exported = True
@@ -115,9 +154,17 @@ class ExoProfileTracker:
         identified_ms = avg_compute + avg_fwd_comm + avg_bwd_comm + avg_sampling
         bubble_overhead = max(0.0, avg_token_latency_ms - identified_ms)
 
+        # 统计分位数
+        sorted_latencies = sorted(self.token_step_latencies)
+        min_lat = sorted_latencies[0] if sorted_latencies else 0.0
+        max_lat = sorted_latencies[-1] if sorted_latencies else 0.0
+        p50_lat = sorted_latencies[len(sorted_latencies) // 2] if sorted_latencies else 0.0
+        p95_index = int(len(sorted_latencies) * 0.95)
+        p95_lat = sorted_latencies[p95_index] if sorted_latencies else 0.0
+
         report: dict[str, Any] = {
             "report_name": "EXO Distributed LLM Inference Profiling Report",
-            "model_id": "mlx-community/Meta-Llama-3.1-8B-Instruct-bf16",
+            "model_id": self.model_id,
             "device_rank": self.device_rank,
             "prompt_statistics": {
                 "prompt_content": self.prompt_text,
@@ -138,28 +185,39 @@ class ExoProfileTracker:
                 "avg_per_token_sampling_ms": round(avg_sampling, 2),
                 "pipeline_bubble_and_overhead_ms": round(bubble_overhead, 2),
             },
+            "latency_percentiles_ms": {
+                "min_ms": round(min_lat, 2),
+                "max_ms": round(max_lat, 2),
+                "p50_ms": round(p50_lat, 2),
+                "p95_ms": round(p95_lat, 2),
+            },
         }
 
         try:
             target_path = os.path.abspath(self.output_filepath)
-            os.makedirs(os.path.dirname(target_path) or ".", exist_ok=True)
-            with open(target_path, "w", encoding="utf-8") as f:
-                json.dump(report, f, ensure_ascii=False, indent=2)
-            print(
-                f"\n[EXO-Profile] 已成功将推理性能报告导出至: {target_path}",
-                flush=True,
-            )
-        except Exception as e:
-            print(f"\n[EXO-Profile] 导出报告失败: {e}", flush=True)
+            target_dir = os.path.dirname(target_path) or "."
+            os.makedirs(target_dir, exist_ok=True)
 
-    def _handle_exit(self, signum: int, _frame: object) -> None:
-        print(
-            f"\n[EXO-Profile] 捕捉到退出信号 ({signum})，正在生成汇总报告...",
-            flush=True,
-        )
-        self.export_report_to_json()
-        sys.exit(0)
+            # 原子性写入：先写入临时文件，再原子替换，防止中断导致空文件或损坏
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=target_dir,
+                delete=False,
+            ) as f:
+                json.dump(report, f, ensure_ascii=False, indent=2)
+                temp_file_name = f.name
+            os.replace(temp_file_name, target_path)
+
+            with contextlib.suppress(Exception):
+                print(
+                    f"\n[EXO-Profile] 已成功将推理性能报告导出至: {target_path}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+        except Exception as e:
+            with contextlib.suppress(Exception):
+                print(f"\n[EXO-Profile] 导出报告失败: {e}", file=sys.stderr, flush=True)
 
 
 profiler = ExoProfileTracker()
-

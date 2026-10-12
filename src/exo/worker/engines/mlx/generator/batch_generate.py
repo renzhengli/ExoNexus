@@ -26,13 +26,13 @@ from exo.api.types import (
 from exo.shared.types.memory import Memory
 from exo.shared.types.text_generation import TextGenerationTaskParams
 from exo.shared.types.worker.runner_response import GenerationResponse
+from exo.utils.profiler_tracker import profiler
 from exo.worker.engines.mlx.cache import (
     CacheSnapshot,
     KVPrefixCache,
     encode_prompt,
     make_kv_cache,
 )
-from exo.utils.profiler_tracker import profiler
 from exo.worker.engines.mlx.constants import DEFAULT_TOP_LOGPROBS, MAX_TOKENS
 from exo.worker.engines.mlx.generator.generate import (
     ban_token_ids,
@@ -58,7 +58,6 @@ from exo.worker.engines.mlx.vision import (
     prepare_vision,
 )
 from exo.worker.runner.bootstrap import logger
-
 
 _MIN_PREFIX_HIT_RATIO_TO_UPDATE = 0.5
 REMOTE_PREFILL_MIN_TOKENS = 1000
@@ -382,7 +381,10 @@ class ExoBatchGenerator:
 
             _fwd_comm_ms = getattr(_first_layer, "_last_comm_ms", 0.0) + getattr(_last_layer, "_last_send_ms", 0.0)
             _ring_comm_ms = getattr(_last_layer, "_last_ring_ms", 0.0)
-            _recorded_compute_ms = getattr(_first_layer, "_last_compute_ms", 0.0) + getattr(_last_layer, "_last_compute_ms", 0.0)
+            if _first_layer is not None and _first_layer is _last_layer:
+                _recorded_compute_ms = getattr(_first_layer, "_last_compute_ms", 0.0)
+            else:
+                _recorded_compute_ms = getattr(_first_layer, "_last_compute_ms", 0.0) + getattr(_last_layer, "_last_compute_ms", 0.0)
 
             _step_ms = _next_elapsed * 1000.0
             if _recorded_compute_ms > 0:

@@ -1,10 +1,10 @@
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
 from functools import partial
 from inspect import signature
 from typing import TYPE_CHECKING, Literal, Protocol, cast
 
-import time
 import mlx.core as mx
 import mlx.nn as nn
 

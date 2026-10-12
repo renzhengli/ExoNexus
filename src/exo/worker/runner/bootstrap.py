@@ -97,6 +97,12 @@ def entrypoint(
         raise SystemExit(1) from e
     finally:
         try:
+            from exo.utils.profiler_tracker import profiler
+
+            profiler.export_report_to_json()
+        except Exception:
+            pass
+        try:
             event_sender.close()
             task_receiver.close()
         finally:

@@ -170,12 +170,6 @@ class Node:
             tg.start_soon(self._elect_loop)
 
     def shutdown(self):
-        try:
-            from exo.utils.profiler_tracker import profiler
-            profiler.export_report_to_json()
-        except Exception:
-            pass
-
         # if this is our second call to shutdown, just sys.exit
         if self._tg.cancel_called():
             import sys

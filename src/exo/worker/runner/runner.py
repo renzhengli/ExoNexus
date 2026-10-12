@@ -101,6 +101,13 @@ class Runner:
         self.model_id = self.shard_metadata.model_card.model_id
         self.device_rank = self.shard_metadata.device_rank
 
+        try:
+            from exo.utils.profiler_tracker import profiler
+
+            profiler.set_device_and_model(self.device_rank, str(self.model_id))
+        except Exception:
+            pass
+
         logger.info("hello from the runner")
         if getattr(self.shard_metadata, "immediate_exception", False):
             raise Exception("Fake exception - runner failed to spin up.")
@@ -222,6 +229,12 @@ class Runner:
                 if isinstance(self.current_status, RunnerShutdown):
                     break
         finally:
+            try:
+                from exo.utils.profiler_tracker import profiler
+
+                profiler.export_report_to_json()
+            except Exception:
+                pass
             if self._prefill_server is not None:
                 self._prefill_server.stop()
                 self._prefill_server = None

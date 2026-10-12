@@ -429,15 +429,19 @@ def warmup_inference(
 
     t = time.monotonic()
 
-    for _r in mlx_generate(
-        model=model,
-        tokenizer=tokenizer,
-        task=warmup_task_params,
-        prompt=warmup_prompt,
-        kv_prefix_cache=None,
-        group=group,
-    ):
-        tokens_generated += 1
+    profiler.set_warmup_mode(True)
+    try:
+        for _r in mlx_generate(
+            model=model,
+            tokenizer=tokenizer,
+            task=warmup_task_params,
+            prompt=warmup_prompt,
+            kv_prefix_cache=None,
+            group=group,
+        ):
+            tokens_generated += 1
+    finally:
+        profiler.set_warmup_mode(False)
 
     check_for_cancel_every = min(
         math.ceil(tokens_generated / min(time.monotonic() - t, 0.001)), 100
@@ -747,7 +751,10 @@ def mlx_generate(
 
         _fwd_comm_ms = getattr(_first_layer, "_last_comm_ms", 0.0) + getattr(_last_layer, "_last_send_ms", 0.0)
         _ring_comm_ms = getattr(_last_layer, "_last_ring_ms", 0.0)
-        _recorded_compute_ms = getattr(_first_layer, "_last_compute_ms", 0.0) + getattr(_last_layer, "_last_compute_ms", 0.0)
+        if _first_layer is not None and _first_layer is _last_layer:
+            _recorded_compute_ms = getattr(_first_layer, "_last_compute_ms", 0.0)
+        else:
+            _recorded_compute_ms = getattr(_first_layer, "_last_compute_ms", 0.0) + getattr(_last_layer, "_last_compute_ms", 0.0)
 
         # 单节点模式下无流水线通信层，本步总耗时即全部为本地计算耗时；分布式模式下若有层埋点则用层埋点，否则总耗时减去通信
         if _recorded_compute_ms > 0:
