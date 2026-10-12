@@ -1,0 +1,24 @@
+{
+  "report_name": "EXO Distributed LLM Inference Profiling Report",
+  "model_id": "mlx-community/Meta-Llama-3.1-8B-Instruct-bf16",
+  "device_rank": 0,
+  "prompt_statistics": {
+    "prompt_content": "",
+    "input_tokens_count": 0,
+    "prefill_latency_ms": 0.0
+  },
+  "generation_statistics": {
+    "output_content": "",
+    "generated_tokens_count": 0,
+    "total_generation_time_seconds": 0.0,
+    "average_latency_per_token_ms": 0.0,
+    "tokens_per_second": 0.0
+  },
+  "detailed_latencies_breakdown_ms": {
+    "avg_per_token_compute_ms": 0.0,
+    "avg_per_token_forward_comm_ms": 0.0,
+    "avg_per_token_backward_comm_ms": 0.0,
+    "avg_per_token_sampling_ms": 0.0,
+    "pipeline_bubble_and_overhead_ms": 0.0
+  }
+}
