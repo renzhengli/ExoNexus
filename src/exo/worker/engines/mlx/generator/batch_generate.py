@@ -32,6 +32,7 @@ from exo.worker.engines.mlx.cache import (
     encode_prompt,
     make_kv_cache,
 )
+from exo.utils.profiler_tracker import profiler
 from exo.worker.engines.mlx.constants import DEFAULT_TOP_LOGPROBS, MAX_TOKENS
 from exo.worker.engines.mlx.generator.generate import (
     ban_token_ids,
@@ -56,8 +57,8 @@ from exo.worker.engines.mlx.vision import (
     VisionResult,
     prepare_vision,
 )
-from exo.utils.profiler_tracker import profiler
 from exo.worker.runner.bootstrap import logger
+
 
 _MIN_PREFIX_HIT_RATIO_TO_UPDATE = 0.5
 REMOTE_PREFILL_MIN_TOKENS = 1000

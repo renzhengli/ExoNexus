@@ -1,5 +1,4 @@
 import argparse
-from argparse import Namespace
 import multiprocessing as mp
 import os
 import resource
@@ -507,5 +506,6 @@ class Args(FrozenModel):
             help="Force MLX FAST_SYNCH off",
         )
 
-        args: Namespace = parser.parse_args()
+        args = parser.parse_args()
         return cls(**vars(args))  # pyright: ignore[reportAny] - We are intentionally validating here, we can't do it statically
+
