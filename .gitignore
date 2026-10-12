@@ -1,0 +1,45 @@
+# gitingest
+digest.txt
+
+# python
+**/__pycache__
+
+# nix
+.direnv/
+
+# IDEA (PyCharm)
+.idea
+
+# xcode / macos
+*.xcuserstate
+*.xcuserdata
+*.xcuserdatad/
+**/.DS_Store
+app/EXO/build/
+dist/
+
+# rust
+target/
+**/*.rs.bk
+*.pdb
+
+# svelte
+dashboard/build/
+dashboard/node_modules/
+dashboard/.svelte-kit/
+
+# host config snapshots
+hosts_*.json
+.swp
+
+# bench files
+bench/**/*.json
+
+# tmp
+tmp/models
+/build/exo
+/.agents
+/.claude/skills
+/.claude
+/.codex
+skills-lock.json

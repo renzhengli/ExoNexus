@@ -1,0 +1,27 @@
+[package]
+name = "networking"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+async-stream.workspace = true
+futures-lite.workspace = true
+netwatcher = { workspace = true, features = ["tokio"] }
+parking_lot.workspace = true
+tokio = { workspace = true, features = ["full"] }
+zenoh = { workspace = true, features = ["internal", "plugins", "unstable"] }
+zenoh-plugin-storage-manager.workspace = true
+zenoh-plugin-trait.workspace = true
+rand.workspace = true
+log.workspace = true
+bytemuck = { workspace = true, features = ["derive"] }
+socket2.workspace = true
+blake3.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true
+smol.workspace = true
+tracing.workspace = true
